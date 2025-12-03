@@ -54,3 +54,13 @@ htmlcov/
 *.pem
 *.key
 id_rsa*
+
+vm_provisioning/
+AI_AGENTS_IMPLEMENTED.md
+COMPLETE_SETUP_GUIDE.md
+ENV_API_CONFIGURATION.md
+IMPLEMENTATION_COMPLETE.md
+USAGE.md
+readme.md
+demo.py
+examples/cpu-spike-example/README.md
