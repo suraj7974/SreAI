@@ -64,3 +64,8 @@ USAGE.md
 readme.md
 demo.py
 examples/cpu-spike-example/README.md
+IMPLEMENTATION_SUMMARY.md
+QUICKSTART_AGENTS.md
+REAL_AI_AGENTS.md
+VERIFICATION_CHECKLIST.md
+test_real_agents.py

@@ -13,6 +13,7 @@ import logging
 
 from app.config import settings
 from app.coordinator import IncidentCoordinator
+from app.agents_v2.orchestrator import MultiAgentOrchestrator
 from app.utils import setup_logging, read_trace
 
 # Setup logging
@@ -39,8 +40,11 @@ app.add_middleware(
 # Security
 security = HTTPBearer()
 
-# Initialize coordinator
+# Initialize coordinator (old system)
 coordinator = IncidentCoordinator(storage_path=settings.incident_storage_path)
+
+# Initialize multi-agent orchestrator (new system)
+multi_agent_orchestrator = MultiAgentOrchestrator(storage_path=settings.incident_storage_path)
 
 # Templates for dashboard
 templates = Jinja2Templates(directory="frontend")
@@ -107,6 +111,43 @@ async def start_incident(
         )
     except Exception as e:
         logger.error(f"Failed to start incident: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Start incident with real AI agents
+@app.post("/v2/start_incident", response_model=IncidentResponse)
+async def start_incident_v2(
+    request: StartIncidentRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(verify_token)
+):
+    """Start incident response with real AI agents (LangGraph multi-agent system)"""
+    
+    try:
+        incident_id = await multi_agent_orchestrator.start_incident(
+            scenario=request.scenario,
+            target_vm=request.target_vm.dict(),
+            options=request.options
+        )
+        
+        return IncidentResponse(
+            incident_id=incident_id,
+            status="started"
+        )
+    except Exception as e:
+        logger.error(f"Failed to start incident with AI agents: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Get agent status
+@app.get("/agents/status")
+async def get_agents_status():
+    """Get status of all AI agents"""
+    
+    try:
+        status = await multi_agent_orchestrator.get_agent_status()
+        return status
+    except Exception as e:
+        logger.error(f"Failed to get agent status: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
