@@ -1,11 +1,13 @@
-export const formatDate = (dateString) => {
+export const formatDate = (dateString: string): string => {
   if (!dateString) return '';
   const date = new Date(dateString);
   return date.toLocaleString();
 };
 
-export const getStatusColor = (status) => {
-  const colors = {
+type Status = 'running' | 'complete' | 'error' | 'initializing';
+
+export const getStatusColor = (status: Status): string => {
+  const colors: Record<Status, string> = {
     running: 'bg-yellow-500',
     complete: 'bg-green-500',
     error: 'bg-red-500',
@@ -14,8 +16,10 @@ export const getStatusColor = (status) => {
   return colors[status] || 'bg-gray-500';
 };
 
-export const getAgentColor = (agent) => {
-  const colors = {
+type Agent = 'LogAgent' | 'MetricsAgent' | 'FixerAgent' | 'TesterAgent' | 'ReporterAgent' | 'Coordinator';
+
+export const getAgentColor = (agent: Agent): string => {
+  const colors: Record<Agent, string> = {
     LogAgent: 'border-blue-500',
     MetricsAgent: 'border-purple-500',
     FixerAgent: 'border-green-500',
@@ -26,7 +30,7 @@ export const getAgentColor = (agent) => {
   return colors[agent] || 'border-gray-500';
 };
 
-export const downloadFile = (url, filename) => {
+export const downloadFile = (url: string, filename: string): void => {
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;

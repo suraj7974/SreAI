@@ -1,11 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
 import { getIncidentStatus } from '../services/api';
+import type { IncidentStatus } from '../types';
 
-export const useIncidentPolling = (incidentId, interval = 2000) => {
-  const [data, setData] = useState(null);
+interface UseIncidentPollingReturn {
+  data: IncidentStatus | null;
+  loading: boolean;
+  error: string | null;
+}
+
+export const useIncidentPolling = (incidentId: string | undefined, interval: number = 2000): UseIncidentPollingReturn => {
+  const [data, setData] = useState<IncidentStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const intervalRef = useRef(null);
+  const [error, setError] = useState<string | null>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (!incidentId) return;
@@ -23,7 +30,7 @@ export const useIncidentPolling = (incidentId, interval = 2000) => {
           }
         }
       } catch (err) {
-        setError(err.message);
+        setError(err instanceof Error ? err.message : 'Unknown error');
       } finally {
         setLoading(false);
       }
