@@ -54,7 +54,7 @@ async def collect_system_logs(ssh_host: str, ssh_port: int, ssh_user: str, ssh_k
 
 @tool
 async def collect_system_metrics(ssh_host: str, ssh_port: int, ssh_user: str, ssh_key_path: str, 
-                                 metrics_port: int, incident_id: str) -> Dict[str, Any]:
+                                 metrics_port: int, incident_id: str) -> str:
     """
     Collect system metrics from the target VM.
     First tries HTTP endpoint, falls back to SSH commands.
@@ -77,7 +77,7 @@ async def collect_system_metrics(ssh_host: str, ssh_port: int, ssh_user: str, ss
             if response.status_code == 200:
                 metrics = response.json()
                 save_artifact(incident_id, "metrics.json", json.dumps(metrics, indent=2))
-                return metrics
+                return json.dumps(metrics, indent=2)
     except Exception:
         pass
     
@@ -109,13 +109,14 @@ async def collect_system_metrics(ssh_host: str, ssh_port: int, ssh_user: str, ss
     except Exception as e:
         metrics["error"] = str(e)
     
-    save_artifact(incident_id, "metrics.json", json.dumps(metrics, indent=2))
-    return metrics
+    metrics_json = json.dumps(metrics, indent=2)
+    save_artifact(incident_id, "metrics.json", metrics_json)
+    return metrics_json
 
 
 @tool
 async def execute_ssh_command(ssh_host: str, ssh_port: int, ssh_user: str, 
-                              ssh_key_path: str, command: str) -> Dict[str, Any]:
+                              ssh_key_path: str, command: str) -> str:
     """
     Execute a specific command on the target VM via SSH.
     Use this to investigate specific issues or apply fixes.
@@ -136,19 +137,21 @@ async def execute_ssh_command(ssh_host: str, ssh_port: int, ssh_user: str,
             command=command
         )
         
-        return {
+        result = {
             "success": exit_code == 0,
             "exit_code": exit_code,
             "stdout": stdout,
             "stderr": stderr,
             "command": command
         }
+        return json.dumps(result, indent=2)
     except Exception as e:
-        return {
+        result = {
             "success": False,
             "error": str(e),
             "command": command
         }
+        return json.dumps(result, indent=2)
 
 
 @tool
@@ -187,7 +190,7 @@ def log_agent_decision(incident_id: str, agent_name: str, decision: str, reasoni
 
 
 @tool
-async def query_previous_incidents(incident_type: str, limit: int = 5) -> List[Dict[str, Any]]:
+async def query_previous_incidents(incident_type: str, limit: int = 5) -> str:
     """
     Query historical incidents of similar type to learn from past resolutions.
     This enables agents to learn from experience.
@@ -198,7 +201,7 @@ async def query_previous_incidents(incident_type: str, limit: int = 5) -> List[D
     """
     # TODO: Implement actual database query
     # For now, return empty list
-    return []
+    return json.dumps([], indent=2)
 
 
 # Export all tools

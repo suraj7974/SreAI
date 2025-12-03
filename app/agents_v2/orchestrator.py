@@ -4,10 +4,7 @@ import logging
 from typing import Dict, Any
 from langgraph.graph import StateGraph, END
 from app.agents_v2 import AgentState
-from app.agents_v2.diagnostic_agent import DiagnosticAgent
-from app.agents_v2.remediation_agent import RemediationAgent
-from app.agents_v2.validation_agent import ValidationAgent
-from app.agents_v2.reporter_agent import ReporterAgent
+from app.agents_v2.simplified_diagnostic_agent import SimplifiedDiagnosticAgent
 from app.utils import generate_incident_id, ensure_incident_dir, append_trace_event
 
 logger = logging.getLogger(__name__)
@@ -17,98 +14,32 @@ class MultiAgentOrchestrator:
     """
     Orchestrates autonomous AI agents using LangGraph.
     Agents collaborate, make decisions, and adapt based on their findings.
+    
+    Using simplified agents to avoid Gemini tool calling issues.
     """
     
     def __init__(self, storage_path: str = "./incidents"):
         self.storage_path = storage_path
         
-        # Initialize agents
-        self.diagnostic_agent = DiagnosticAgent()
-        self.remediation_agent = RemediationAgent()
-        self.validation_agent = ValidationAgent()
-        self.reporter_agent = ReporterAgent()
+        # Initialize simplified agent (others to be added)
+        self.diagnostic_agent = SimplifiedDiagnosticAgent()
         
         # Build agent graph
         self.workflow = self._build_workflow()
         
-        logger.info("Multi-Agent Orchestrator initialized with LangGraph")
+        logger.info("Multi-Agent Orchestrator initialized (simplified version)")
     
     def _build_workflow(self) -> StateGraph:
         """Build the agent collaboration workflow"""
         
         workflow = StateGraph(AgentState)
         
-        # Add agent nodes
+        # Add agent node
         workflow.add_node("diagnostic", self.diagnostic_agent)
-        workflow.add_node("remediation", self.remediation_agent)
-        workflow.add_node("validation", self.validation_agent)
-        workflow.add_node("reporter", self.reporter_agent)
         
-        # Define workflow edges (agent collaboration flow)
+        # For now, just diagnostic agent
         workflow.set_entry_point("diagnostic")
-        
-        # Conditional routing based on agent decisions
-        def route_after_diagnostic(state: AgentState) -> str:
-            """Decide where to go after diagnostic"""
-            next_agent = state.get("next_agent", "remediation")
-            if next_agent == "END":
-                return END
-            return next_agent
-        
-        def route_after_remediation(state: AgentState) -> str:
-            """Decide where to go after remediation"""
-            next_agent = state.get("next_agent", "validation")
-            # Agent could decide to skip validation for low-risk fixes
-            if next_agent == "END":
-                return END
-            return next_agent
-        
-        def route_after_validation(state: AgentState) -> str:
-            """Decide where to go after validation"""
-            next_agent = state.get("next_agent", "reporter")
-            if next_agent == "END":
-                return END
-            return next_agent
-        
-        def route_after_reporter(state: AgentState) -> str:
-            """Always end after reporter"""
-            return END
-        
-        # Add conditional edges
-        workflow.add_conditional_edges(
-            "diagnostic",
-            route_after_diagnostic,
-            {
-                "remediation": "remediation",
-                END: END
-            }
-        )
-        
-        workflow.add_conditional_edges(
-            "remediation",
-            route_after_remediation,
-            {
-                "validation": "validation",
-                "reporter": "reporter",
-                END: END
-            }
-        )
-        
-        workflow.add_conditional_edges(
-            "validation",
-            route_after_validation,
-            {
-                "reporter": "reporter",
-                "remediation": "remediation",  # Could loop back if validation fails
-                END: END
-            }
-        )
-        
-        workflow.add_conditional_edges(
-            "reporter",
-            route_after_reporter,
-            {END: END}
-        )
+        workflow.set_finish_point("diagnostic")
         
         return workflow.compile()
     
@@ -199,12 +130,10 @@ class MultiAgentOrchestrator:
         """Get status of all agents"""
         return {
             "agents": [
-                {"name": "DiagnosticAgent", "status": "online", "capability": "data_collection"},
-                {"name": "RemediationAgent", "status": "online", "capability": "fix_generation"},
-                {"name": "ValidationAgent", "status": "online", "capability": "risk_assessment"},
-                {"name": "ReporterAgent", "status": "online", "capability": "reporting"}
+                {"name": "DiagnosticAgent", "status": "online", "capability": "data_collection"}
             ],
             "orchestrator": "LangGraph",
             "autonomous": True,
-            "collaborative": True
+            "collaborative": True,
+            "note": "Simplified version - full multi-agent system coming soon"
         }
