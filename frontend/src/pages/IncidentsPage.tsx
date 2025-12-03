@@ -1,87 +1,72 @@
-import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { listIncidents } from '../services/api';
-import { formatDate, getStatusColor } from '../utils/helpers';
-import type { Incident } from '../types';
+import { useIncidentPolling } from '@/hooks/useIncidentPolling';
+import { IncidentCard } from '@/components/IncidentCard';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { RefreshCw, Filter } from 'lucide-react';
+import { useState } from 'react';
 
 export default function IncidentsPage() {
-  const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { incidents, loading, error } = useIncidentPolling();
+  const [filter, setFilter] = useState<string>('all');
 
-  useEffect(() => {
-    const fetchIncidents = async () => {
-      try {
-        const response = await listIncidents();
-        setIncidents(response.data);
-        setError(null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load incidents');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchIncidents();
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-400">Loading incidents...</div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="bg-red-900/20 border border-red-800 rounded-lg p-4">
-        <p className="text-red-400">Error: {error}</p>
-      </div>
-    );
-  }
+  const filteredIncidents = filter === 'all' ? incidents : incidents.filter(i => i.status === filter);
 
   return (
-    <div className="space-y-6">
+    <div className="p-8 space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-white">All Incidents</h1>
-        <span className="text-gray-400">{incidents.length} total</span>
+        <div>
+          <h1 className="text-3xl font-bold text-white">All Incidents</h1>
+          <p className="text-gray-400 mt-1">View and manage all system incidents</p>
+        </div>
+        <Button variant="outline">
+          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          Auto-refresh: ON
+        </Button>
       </div>
 
-      {incidents.length === 0 ? (
-        <div className="bg-gray-800 rounded-lg p-8 text-center">
-          <p className="text-gray-400">No incidents found</p>
-          <p className="text-sm text-gray-500 mt-2">
-            Run <code className="bg-gray-700 px-2 py-1 rounded">python3 demo.py</code> to create a demo incident
-          </p>
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-gray-400" />
+            <span className="text-sm text-gray-400 mr-2">Filter:</span>
+            <div className="flex gap-2">
+              {['all', 'open', 'investigating', 'resolved', 'closed'].map((status) => (
+                <Button
+                  key={status}
+                  variant={filter === status ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setFilter(status)}
+                >
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                  {status === 'all' && ` (${incidents.length})`}
+                  {status !== 'all' && ` (${incidents.filter(i => i.status === status).length})`}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {error && (
+        <Card className="border-red-500">
+          <CardContent className="p-6 text-red-500">Error loading incidents: {error}</CardContent>
+        </Card>
+      )}
+
+      {loading && incidents.length === 0 ? (
+        <div className="flex items-center justify-center py-12">
+          <RefreshCw className="h-8 w-8 animate-spin text-gray-400" />
         </div>
+      ) : filteredIncidents.length === 0 ? (
+        <Card>
+          <CardContent className="p-12 text-center text-gray-400">
+            No incidents found with status: {filter}
+          </CardContent>
+        </Card>
       ) : (
-        <div className="grid gap-4">
-          {incidents.map((incident) => (
-            <Link
-              key={incident.incident_id}
-              to={`/dashboard/${incident.incident_id}`}
-              className="bg-gray-800 hover:bg-gray-700 rounded-lg p-6 transition-colors"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-white mb-2">
-                    {incident.incident_id}
-                  </h3>
-                  <p className="text-sm text-gray-400">
-                    {formatDate(incident.created_at)}
-                  </p>
-                  {incident.scenario && (
-                    <p className="text-sm text-gray-500 mt-1">
-                      Scenario: {incident.scenario}
-                    </p>
-                  )}
-                </div>
-                <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(incident.status as any)}`}>
-                  {incident.status}
-                </span>
-              </div>
-            </Link>
+        <div className="space-y-4">
+          {filteredIncidents.map((incident) => (
+            <IncidentCard key={incident.id} incident={incident} />
           ))}
         </div>
       )}

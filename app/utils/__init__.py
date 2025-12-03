@@ -89,16 +89,33 @@ def read_trace(incident_id: str, base_path: str = "./incidents") -> List[Dict[st
     return json.loads(trace_file.read_text())
 
 
-async def run_ssh_command(host: str, port: int, username: str, key_path: str, command: str) -> tuple:
+async def run_ssh_command(host: str, port: int, username: str, key_path: str, command: str, timeout: int = 10) -> tuple:
     """Execute a command via SSH and return (stdout, stderr, exit_code)"""
     import paramiko
+    import os
     
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     
     try:
-        key = paramiko.RSAKey.from_private_key_file(key_path)
-        client.connect(hostname=host, port=port, username=username, pkey=key)
+        # Expand ~ in path
+        key_path = os.path.expanduser(key_path)
+        
+        # Try to load the key - support both RSA and Ed25519
+        key = None
+        try:
+            key = paramiko.RSAKey.from_private_key_file(key_path)
+        except paramiko.ssh_exception.SSHException:
+            try:
+                key = paramiko.Ed25519Key.from_private_key_file(key_path)
+            except paramiko.ssh_exception.SSHException:
+                try:
+                    key = paramiko.ECDSAKey.from_private_key_file(key_path)
+                except:
+                    # Last resort - try DSS
+                    key = paramiko.DSSKey.from_private_key_file(key_path)
+        
+        client.connect(hostname=host, port=port, username=username, pkey=key, timeout=timeout)
         
         stdin, stdout, stderr = client.exec_command(command)
         

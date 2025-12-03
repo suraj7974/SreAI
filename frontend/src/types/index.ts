@@ -38,9 +38,16 @@ export interface IncidentStatus {
 }
 
 export interface Incident {
+  id: string;
   incident_id: string;
+  title: string;
+  description: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  status: 'open' | 'investigating' | 'resolved' | 'closed';
   created_at: string;
-  status: string;
+  updated_at?: string;
+  resolved_at?: string;
+  assigned_to?: string;
   scenario?: string;
 }
 
@@ -60,4 +67,10 @@ export interface HealthStatus {
 
 export interface ArtifactData {
   [key: string]: any;
+}
+
+export interface UseIncidentPollingReturn {
+  incidents: Incident[];
+  loading: boolean;
+  error: string | null;
 }

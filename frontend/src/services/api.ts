@@ -29,7 +29,12 @@ export const getIncidentReport = (incidentId: string) => api.get<IncidentReport>
 
 export const stopIncident = (incidentId: string) => api.post(`/stop/${incidentId}`);
 
-export const listIncidents = () => api.get<Incident[]>('/incidents');
+export const listIncidents = () => api.get<{ data: Incident[] }>('/incidents');
+
+export const fetchIncidents = async (): Promise<Incident[]> => {
+  const response = await api.get<{ data: Incident[] }>('/incidents');
+  return response.data.data;
+};
 
 export const getArtifact = (incidentId: string, artifactName: string) => 
   api.get<ArtifactData>(`/incidents/${incidentId}/artifacts/${artifactName}`);

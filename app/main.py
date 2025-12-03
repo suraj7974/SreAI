@@ -257,6 +257,138 @@ async def list_incidents(
     return {"incidents": incidents}
 
 
+# Get VM system metrics (no auth for dashboard polling)
+@app.get("/vm/metrics")
+async def get_vm_metrics():
+    """Get real-time VM system metrics"""
+    from app.utils import run_ssh_command
+    import asyncio
+    
+    # Get VM config from settings
+    if not settings.vm_host:
+        return {"error": "VM not configured"}
+    
+    try:
+        # Collect metrics in parallel
+        async def get_cpu():
+            cmd = "top -bn1 | grep 'Cpu(s)' | awk '{print $2}' | sed 's/%us,//'"
+            out, _, _ = await run_ssh_command(
+                settings.vm_host, settings.vm_port, settings.vm_user, 
+                settings.vm_key_path, cmd, timeout=5
+            )
+            return float(out.strip()) if out.strip() else 0.0
+        
+        async def get_memory():
+            cmd = "free | grep Mem | awk '{print ($3/$2) * 100.0}'"
+            out, _, _ = await run_ssh_command(
+                settings.vm_host, settings.vm_port, settings.vm_user, 
+                settings.vm_key_path, cmd, timeout=5
+            )
+            return float(out.strip()) if out.strip() else 0.0
+        
+        async def get_disk():
+            cmd = "df -h / | tail -1 | awk '{print $5}' | sed 's/%//'"
+            out, _, _ = await run_ssh_command(
+                settings.vm_host, settings.vm_port, settings.vm_user, 
+                settings.vm_key_path, cmd, timeout=5
+            )
+            return float(out.strip()) if out.strip() else 0.0
+        
+        async def get_uptime():
+            cmd = "uptime -p"
+            out, _, _ = await run_ssh_command(
+                settings.vm_host, settings.vm_port, settings.vm_user, 
+                settings.vm_key_path, cmd, timeout=5
+            )
+            return out.strip() if out.strip() else "unknown"
+        
+        cpu, memory, disk, uptime = await asyncio.gather(
+            get_cpu(), get_memory(), get_disk(), get_uptime(),
+            return_exceptions=True
+        )
+        
+        return {
+            "cpuUsage": cpu if not isinstance(cpu, Exception) else 0.0,
+            "memoryUsage": memory if not isinstance(memory, Exception) else 0.0,
+            "diskUsage": disk if not isinstance(disk, Exception) else 0.0,
+            "uptime": uptime if not isinstance(uptime, Exception) else "unknown",
+            "timestamp": logger.handlers[0].formatter.formatTime(logging.LogRecord("", 0, "", 0, "", (), None)) if logger.handlers else ""
+        }
+    except Exception as e:
+        logger.error(f"Failed to get VM metrics: {e}")
+        return {"error": str(e)}
+
+
+# Get real-time VM logs and incidents (no auth for dashboard polling)
+@app.get("/vm/logs")
+async def get_vm_logs():
+    """Get real-time VM logs and parse for incidents"""
+    from app.utils import run_ssh_command
+    import re
+    from datetime import datetime
+    
+    # Get VM config from settings
+    if not settings.vm_host:
+        return {"error": "VM not configured"}
+    
+    try:
+        # Get recent logs with errors and warnings
+        cmd = """
+        sudo journalctl -n 100 --no-pager --output=json 2>/dev/null | jq -r '. | select(.PRIORITY <= "4") | "[\(.PRIORITY)][\(.__REALTIME_TIMESTAMP)][\(.SYSLOG_IDENTIFIER // "system")] \(.MESSAGE)"' 2>/dev/null || \
+        sudo journalctl -n 100 --no-pager | grep -iE '(error|warn|fail|critical|alert)' | tail -20
+        """
+        
+        stdout, stderr, exit_code = await run_ssh_command(
+            settings.vm_host, settings.vm_port, settings.vm_user, 
+            settings.vm_key_path, cmd, timeout=10
+        )
+        
+        if not stdout or exit_code != 0:
+            return {"incidents": [], "message": "No recent incidents found"}
+        
+        # Parse logs into incidents
+        incidents = []
+        lines = stdout.strip().split('\n')
+        
+        for line in lines[-20:]:  # Last 20 log entries
+            if not line.strip():
+                continue
+                
+            # Determine severity
+            severity = 'info'
+            if re.search(r'(critical|alert|emerg)', line, re.I):
+                severity = 'error'
+            elif re.search(r'(error|err)', line, re.I):
+                severity = 'error'
+            elif re.search(r'(warn|warning)', line, re.I):
+                severity = 'warning'
+            elif re.search(r'(fail|failure)', line, re.I):
+                severity = 'error'
+            else:
+                severity = 'info'
+            
+            # Extract service name if possible
+            service_match = re.search(r'\[([^\]]+)\].*\[([^\]]+)\]', line)
+            service = service_match.group(2) if service_match and service_match.lastindex >= 2 else "system"
+            
+            # Clean message
+            message = re.sub(r'\[\d+\]\[\d+\]', '', line).strip()
+            message = re.sub(r'\[.*?\]', '', message, count=1).strip()
+            
+            incidents.append({
+                "type": severity,
+                "service": service,
+                "message": message[:200],  # Limit message length
+                "timestamp": datetime.now().isoformat()
+            })
+        
+        return {"incidents": incidents}
+        
+    except Exception as e:
+        logger.error(f"Failed to get VM logs: {e}")
+        return {"error": str(e), "incidents": []}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
