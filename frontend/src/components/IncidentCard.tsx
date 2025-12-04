@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import type { Incident } from '@/types';
 import { ReactElement } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 interface IncidentCardProps {
   incident: Incident;
@@ -23,8 +24,13 @@ const statusIcons: Record<Incident['status'], ReactElement> = {
 };
 
 export function IncidentCard({ incident }: IncidentCardProps) {
+  const navigate = useNavigate();
+  
   return (
-    <Card className="hover:border-gray-600 transition-colors">
+    <Card 
+      className="hover:border-gray-600 transition-colors cursor-pointer" 
+      onClick={() => navigate(`/incidents/${incident.incident_id}`)}
+    >
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="flex-1">

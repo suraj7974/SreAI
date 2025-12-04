@@ -217,6 +217,55 @@ async def get_report_pdf(
 
 
 # Get incident artifacts
+# Get incident details with all files
+@app.get("/incidents/{incident_id}")
+async def get_incident_details(
+    incident_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(verify_token)
+):
+    """Get incident details including all files and their contents"""
+    
+    incident_path = Path(settings.incident_storage_path) / incident_id
+    
+    if not incident_path.exists():
+        raise HTTPException(status_code=404, detail="Incident not found")
+    
+    files = []
+    
+    # List all files in the incident directory
+    for file_path in incident_path.rglob("*"):
+        if file_path.is_file():
+            relative_path = file_path.relative_to(incident_path)
+            file_info = {
+                "name": file_path.name,
+                "path": str(relative_path),
+                "size": file_path.stat().st_size,
+                "modified": file_path.stat().st_mtime,
+            }
+            
+            # Try to read text content for common file types
+            if file_path.suffix in ['.txt', '.md', '.json', '.log', '.sh', '.py']:
+                try:
+                    with open(file_path, 'r') as f:
+                        file_info["content"] = f.read()
+                        file_info["type"] = "text"
+                except:
+                    file_info["type"] = "binary"
+            else:
+                file_info["type"] = "binary"
+            
+            files.append(file_info)
+    
+    # Get trace
+    trace = read_trace(incident_id, base_path=settings.incident_storage_path)
+    
+    return {
+        "incident_id": incident_id,
+        "files": files,
+        "trace": trace
+    }
+
+
 @app.get("/incidents/{incident_id}/artifacts/{artifact_name}")
 async def get_artifact(
     incident_id: str,
@@ -282,20 +331,61 @@ async def list_incidents(
     incidents_path = Path(settings.incident_storage_path)
     
     if not incidents_path.exists():
-        return {"incidents": []}
+        return {"data": []}
     
     incidents = []
-    for incident_dir in incidents_path.iterdir():
+    for incident_dir in sorted(incidents_path.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
         if incident_dir.is_dir():
             trace = read_trace(incident_dir.name, base_path=settings.incident_storage_path)
             
+            # Extract incident details from trace
+            status = "investigating"
+            scenario = "unknown"
+            created_at = None
+            updated_at = None
+            severity = "medium"
+            
+            if trace:
+                # Get first event for created_at
+                created_at = trace[0].get("timestamp", "")
+                # Get last event for updated_at and status
+                last_event = trace[-1]
+                updated_at = last_event.get("timestamp", "")
+                
+                # Determine status from trace events
+                for event in trace:
+                    event_type = event.get("event", "")
+                    if "complete" in event_type.lower() or "resolved" in event_type.lower():
+                        status = "resolved"
+                    elif "error" in event_type.lower() or "failed" in event_type.lower():
+                        status = "open"
+                        severity = "high"
+                    elif event.get("data", {}).get("scenario"):
+                        scenario = event["data"]["scenario"]
+                
+                # If we have events but no completion, it's investigating
+                if status != "resolved" and len(trace) > 0:
+                    status = "investigating"
+            
+            # Use mtime as fallback for timestamps
+            if not created_at:
+                created_at = incident_dir.stat().st_ctime
+            if not updated_at:
+                updated_at = incident_dir.stat().st_mtime
+            
             incidents.append({
+                "id": incident_dir.name,
                 "incident_id": incident_dir.name,
-                "events_count": len(trace),
-                "latest_event": trace[-1] if trace else None
+                "title": f"Incident {incident_dir.name}",
+                "description": f"Scenario: {scenario} - {len(trace)} events",
+                "severity": severity,
+                "status": status,
+                "created_at": str(created_at),
+                "updated_at": str(updated_at),
+                "scenario": scenario
             })
     
-    return {"incidents": incidents}
+    return {"data": incidents}
 
 
 # Get VM system metrics (no auth for dashboard polling)
