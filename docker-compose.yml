@@ -37,6 +37,7 @@ services:
     volumes:
       - ./incidents:/app/incidents
       - ./sre_agent:/app/sre_agent
+      - ~/.ssh/id_ed25519:/app/ssh/id_ed25519:ro  # SSH key for remediation
     depends_on:
       - prometheus
       - grafana
