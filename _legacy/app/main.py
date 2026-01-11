@@ -40,11 +40,15 @@ app.add_middleware(
 # Security
 security = HTTPBearer()
 
-# Initialize coordinator (old system)
+# Initialize coordinator (old system - deprecated)
 coordinator = IncidentCoordinator(storage_path=settings.incident_storage_path)
 
-# Initialize multi-agent orchestrator (new system)
+# Initialize multi-agent orchestrator (new system - generates 4 files only)
 multi_agent_orchestrator = MultiAgentOrchestrator(storage_path=settings.incident_storage_path)
+
+# Initialize auto-monitor (always running)
+from app.auto_monitor import AutoMonitor
+auto_monitor = AutoMonitor(multi_agent_orchestrator)
 
 # Templates for dashboard
 templates = Jinja2Templates(directory="frontend")
@@ -83,44 +87,42 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Security(security))
     return credentials
 
 
+# Startup event - start auto-monitoring
+@app.on_event("startup")
+async def startup_event():
+    """Start auto-monitoring when app starts"""
+    if settings.vm_host:
+        auto_monitor.start()
+        logger.info("✅ Auto-monitoring started - AI agents are now watching your VM")
+    else:
+        logger.warning("⚠️  VM not configured - auto-monitoring disabled")
+
+
 # Health check endpoint (no auth required)
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "healthy", "version": "1.0.0"}
+    return {
+        "status": "healthy",
+        "version": "1.0.0",
+        "auto_monitor": auto_monitor.running,
+        "vm_configured": settings.vm_host is not None
+    }
 
 
-# Start incident endpoint
+# Start incident endpoint (generates 4 files only)
 @app.post("/start_incident", response_model=IncidentResponse)
 async def start_incident(
     request: StartIncidentRequest,
     credentials: HTTPAuthorizationCredentials = Depends(verify_token)
 ):
-    """Start a new incident response workflow"""
-    
-    try:
-        incident_id = await coordinator.start_incident(
-            scenario=request.scenario,
-            target_vm=request.target_vm.dict(),
-            options=request.options
-        )
-        
-        return IncidentResponse(
-            incident_id=incident_id,
-            status="started"
-        )
-    except Exception as e:
-        logger.error(f"Failed to start incident: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# Start incident with real AI agents
-@app.post("/v2/start_incident", response_model=IncidentResponse)
-async def start_incident_v2(
-    request: StartIncidentRequest,
-    credentials: HTTPAuthorizationCredentials = Depends(verify_token)
-):
-    """Start incident response with real AI agents (LangGraph multi-agent system)"""
+    """
+    Start AI incident response - generates 4 files:
+    1. logs.txt - Raw VM logs
+    2. metrics.json - System metrics
+    3. diagnostic_analysis.md - AI analysis
+    4. fix_commands.sh - Fix script
+    """
     
     try:
         incident_id = await multi_agent_orchestrator.start_incident(
@@ -134,7 +136,7 @@ async def start_incident_v2(
             status="started"
         )
     except Exception as e:
-        logger.error(f"Failed to start incident with AI agents: {e}", exc_info=True)
+        logger.error(f"Failed to start incident: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

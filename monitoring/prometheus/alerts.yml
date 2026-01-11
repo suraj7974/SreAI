@@ -1,0 +1,167 @@
+# Alert Rules for SRE Agent System
+groups:
+  # =============================================================================
+  # Node/VM Health Alerts
+  # =============================================================================
+  - name: node_health
+    rules:
+      # High CPU Usage
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 2m
+        labels:
+          severity: warning
+          category: cpu
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is above 80% (current: {{ $value | printf \"%.1f\" }}%)"
+          runbook: "Check top processes with: top -bn1 | head -20"
+
+      - alert: CriticalCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 95
+        for: 1m
+        labels:
+          severity: critical
+          category: cpu
+        annotations:
+          summary: "Critical CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is above 95% (current: {{ $value | printf \"%.1f\" }}%)"
+
+      # High Memory Usage
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 2m
+        labels:
+          severity: warning
+          category: memory
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage is above 85% (current: {{ $value | printf \"%.1f\" }}%)"
+          runbook: "Check memory consumers: ps aux --sort=-%mem | head -10"
+
+      - alert: CriticalMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 95
+        for: 1m
+        labels:
+          severity: critical
+          category: memory
+        annotations:
+          summary: "Critical memory usage on {{ $labels.instance }}"
+          description: "Memory usage is above 95% (current: {{ $value | printf \"%.1f\" }}%)"
+
+      # Disk Space
+      - alert: DiskSpaceLow
+        expr: (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"})) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          category: disk
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }}"
+          description: "Disk usage on {{ $labels.mountpoint }} is above 80% (current: {{ $value | printf \"%.1f\" }}%)"
+
+      - alert: DiskSpaceCritical
+        expr: (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"})) * 100 > 95
+        for: 1m
+        labels:
+          severity: critical
+          category: disk
+        annotations:
+          summary: "Critical disk space on {{ $labels.instance }}"
+          description: "Disk usage on {{ $labels.mountpoint }} is above 95%"
+
+      # High Load Average
+      - alert: HighLoadAverage
+        expr: node_load1 / count without(cpu, mode) (node_cpu_seconds_total{mode="idle"}) > 2
+        for: 5m
+        labels:
+          severity: warning
+          category: load
+        annotations:
+          summary: "High load average on {{ $labels.instance }}"
+          description: "Load average (1m) is {{ $value | printf \"%.2f\" }} times the CPU count"
+
+  # =============================================================================
+  # Network Alerts
+  # =============================================================================
+  - name: network_health
+    rules:
+      - alert: HighNetworkTraffic
+        expr: rate(node_network_receive_bytes_total{device!~"lo|docker.*|br-.*|veth.*"}[5m]) > 100000000
+        for: 5m
+        labels:
+          severity: warning
+          category: network
+        annotations:
+          summary: "High network traffic on {{ $labels.instance }}"
+          description: "Network receive rate is above 100MB/s on {{ $labels.device }}"
+
+      - alert: NetworkInterfaceDown
+        expr: node_network_up{device!~"lo|docker.*|br-.*|veth.*"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: network
+        annotations:
+          summary: "Network interface down on {{ $labels.instance }}"
+          description: "Interface {{ $labels.device }} is down"
+
+  # =============================================================================
+  # Service Availability
+  # =============================================================================
+  - name: service_availability
+    rules:
+      - alert: TargetDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "Target {{ $labels.instance }} is down"
+          description: "Prometheus target {{ $labels.job }}/{{ $labels.instance }} is not responding"
+
+      - alert: PrometheusTargetMissing
+        expr: up == 0
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Prometheus target missing: {{ $labels.instance }}"
+          description: "A Prometheus target has disappeared. Job: {{ $labels.job }}"
+
+  # =============================================================================
+  # System Health
+  # =============================================================================
+  - name: system_health
+    rules:
+      - alert: SystemdServiceFailed
+        expr: node_systemd_unit_state{state="failed"} == 1
+        for: 1m
+        labels:
+          severity: warning
+          category: systemd
+        annotations:
+          summary: "Systemd service failed on {{ $labels.instance }}"
+          description: "Service {{ $labels.name }} has failed"
+
+      - alert: OOMKillDetected
+        expr: increase(node_vmstat_oom_kill[5m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          category: memory
+        annotations:
+          summary: "OOM kill detected on {{ $labels.instance }}"
+          description: "Out of memory kill detected in the last 5 minutes"
+
+      - alert: HighFileDescriptorUsage
+        expr: node_filefd_allocated / node_filefd_maximum * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "High file descriptor usage on {{ $labels.instance }}"
+          description: "File descriptor usage is above 80%"
