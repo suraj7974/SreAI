@@ -39,6 +39,11 @@ incidents/
 *.log
 *.pid
 
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.pnpm-store/
+
 # Testing
 .coverage
 htmlcov/
@@ -50,3 +55,4 @@ htmlcov/
 id_rsa*
 
 _legacy/
+docs/
