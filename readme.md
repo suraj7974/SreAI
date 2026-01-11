@@ -378,9 +378,3 @@ curl -X POST http://localhost:8000/incidents/{id}/approve \
   -H "Content-Type: application/json" \
   -d '{"approved": true}'
 ```
-
----
-
-## License
-
-MIT License - See LICENSE file for details.
